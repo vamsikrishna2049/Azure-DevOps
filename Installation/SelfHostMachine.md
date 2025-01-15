@@ -91,6 +91,9 @@ sudo systemctl enable vsts.agent.krishnap13012025.LinuxHostedPool.azuredevops.se
    ```bash
    sudo systemctl stop vsts.agent.<agent_name>.service
    sudo systemctl disable vsts.agent.<agent_name>.service
+   sudo ./svc.sh stop
+   sudo ./svc.sh uninstall
+    ./config.sh remove
    sudo rm -rf /home/ubuntu/agent
    sudo rm -rf /var/log/vsts-agent/
    sudo rm -rf /var/cache/vsts-agent/
