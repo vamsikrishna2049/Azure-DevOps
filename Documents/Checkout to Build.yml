@@ -1,0 +1,116 @@
+trigger:
+- main
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  IMAGE_TAG: "v$(Build.BuildId)"
+
+steps:
+# Checkout code from GitHub
+- task: Checkout@2
+  inputs:
+    repository: 'https://github.com/vamsikrishna2049/terraform.git'
+    ref: 'refs/heads/main'
+
+# Compile the project
+- task: Maven@3
+  inputs:
+    mavenPomFile: 'pom.xml'
+    options: 'compile'
+
+# Run tests
+- task: Maven@3
+  inputs:
+    mavenPomFile: 'pom.xml'
+    options: 'test'
+
+# Run Trivy FS Scan
+- script: |
+    trivy fs --format table -o fs-report.html .
+  displayName: 'Run Trivy FS Scan'
+
+# SonarQube analysis
+- task: SonarQubePrepare@5
+  inputs:
+    SonarQube: 'sonar' # This should match the name of your SonarQube connection
+    scannerMode: 'CLI'
+    configMode: 'manual'
+    cliProjectKey: 'gcbank'
+    cliProjectName: 'gcbank'
+    extraProperties: |
+      sonar.java.binaries=target
+
+- task: SonarQubeAnalyze@5
+  inputs:
+    SonarQube: 'sonar'
+
+# Wait for the Quality Gate to pass
+- task: SonarQubeQualityGate@5
+  inputs:
+    SonarQube: 'sonar'
+    waitForQualityGate: true
+
+# Build the project (Package it)
+- task: Maven@3
+  inputs:
+    mavenPomFile: 'pom.xml'
+    options: 'package'
+
+# Publish to Nexus
+- task: Maven@3
+  inputs:
+    mavenPomFile: 'pom.xml'
+    options: 'deploy'
+    mavenAuthenticateFeed: true
+
+# Build and tag Docker image
+- task: Docker@2
+  inputs:
+    containerRegistry: 'docker-cred'
+    repository: 'adijaiswal/bankapp'
+    command: 'buildAndPush'
+    Dockerfile: '**/Dockerfile'
+    tags: '$(IMAGE_TAG)'
+
+# Scan Docker image using Trivy
+- script: |
+    trivy image --format table -o image-report.html adijaiswal/bankapp:$(IMAGE_TAG)
+  displayName: 'Run Trivy Image Scan'
+
+# Push Docker image to Docker registry
+- task: Docker@2
+  inputs:
+    containerRegistry: 'docker-cred'
+    repository: 'adijaiswal/bankapp'
+    command: 'push'
+    tags: '$(IMAGE_TAG)'
+
+# Update manifest file in Mega-Project-CD repo
+- task: Checkout@2
+  inputs:
+    repository: 'https://github.com/jaiswaladi246/Mega-Project-CD.git'
+    ref: 'refs/heads/main'
+
+- script: |
+    # Update the image tag in the manifest.yaml file
+    sed -i "s|adijaiswal/bankapp:.*|adijaiswal/bankapp:$(IMAGE_TAG)|" Manifest/manifest.yaml
+
+    # Confirm changes
+    echo "Updated manifest file contents:"
+    cat Manifest/manifest.yaml
+
+    # Commit and push the changes
+    git config user.name "Azure DevOps"
+    git config user.email "azuredevops@example.com"
+    git add Manifest/manifest.yaml
+    git commit -m "Update image tag to $(IMAGE_TAG)"
+    git push origin main
+  displayName: 'Update Manifest File in Mega-Project-CD'
+
+# Azure Subscription
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: 'Your Azure Subscription'
+    appName: 'YourAppName'
+    package: '$(Pipeline.Workspace)/drop/yourApp.zip'

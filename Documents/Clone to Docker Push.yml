@@ -1,0 +1,10 @@
+trigger:
+- none
+
+pool:
+  vmImage: AWSAgentPool
+
+jobs:
+  job: 'Clone Repo'
+  steps:
+    step: 'Started creating Git Clone repo to Local'

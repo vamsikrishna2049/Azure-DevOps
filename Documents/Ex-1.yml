@@ -1,0 +1,11 @@
+trigger:
+  - master
+
+pool:
+    name: AWSLinuxAgentPool
+
+steps:
+  - script: |
+        echo Hello, world!
+        git clone https://github.com/vamsikrishna2049/Kubernetes.git
+    displayName: 'Clone repository'

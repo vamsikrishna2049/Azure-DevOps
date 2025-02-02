@@ -1,0 +1,60 @@
+trigger:
+  - master
+
+pool:
+    name: LinuxHostedPool
+
+stages:
+  - stage: A
+    jobs:
+      - job: A
+        pool:
+            name: LinuxHostedPool
+            demands:
+              - Docker -equals Yes # Docker is required for Job A
+        steps:
+          - script: ls -al
+            displayName: 'Job A in Stage A'
+      - job: B
+        pool:
+            name: LinuxHostedPool
+            demands:
+              - Docker -equals Yes # Docker is required for Job B
+        steps:
+          - task: CmdLine@2
+            inputs:
+                script: ls -al
+      - job: C
+        dependsOn: B # Job C depends on Job B to complete
+        pool:
+            name: LinuxHostedPool
+            demands:
+              - Docker -equals No # Docker is not required for Job C
+        steps:
+          - task: CmdLine@2
+            inputs:
+                script: ls -al
+
+  - stage: B
+    dependsOn: A # Stage B will only run after Stage A
+    jobs:
+      - job: A
+        pool:
+            name: LinuxHostedPool
+            demands:
+              - Docker -equals Yes # Docker is required for Job A
+        steps:
+          - script: ls -al
+            displayName: 'Job A in Stage B'
+
+  - stage: C
+    dependsOn: B # Stage C will run after Stage B
+    jobs:
+      - job: A
+        pool:
+            name: LinuxHostedPool
+            demands:
+              - Docker -equals Yes # Docker is required for Job A in Stage C
+        steps:
+          - script: echo Hello, World!
+            displayName: 'Job A in Stage C'

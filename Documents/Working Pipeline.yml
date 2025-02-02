@@ -1,0 +1,72 @@
+trigger:
+- master
+
+pool:
+  name: LinuxHostedPool
+
+variables:
+  s3_path: '2025'
+
+steps:
+# Step 1: Checkout the code from the repository
+- checkout: self # This checks out the code from the repository associated with the pipeline
+
+# Step 2: Run Maven Build and Tests
+- task: Maven@4
+  inputs:
+    mavenPomFile: 'pom.xml'
+    publishJUnitResults: true
+    testResultsFiles: '**/surefire-reports/TEST-*.xml'
+    javaHomeOption: 'JDKVersion'
+    mavenVersionOption: 'Default'
+    mavenAuthenticateFeed: false #it will check with pom.xml from artifacts repo
+    effectivePomSkip: false
+    sonarQubeRunAnalysis: false
+    goals: clean package
+
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(System.DefaultWorkingDirectory)'
+    ArtifactName: 'maven-webapp'
+    publishLocation: 'Container'
+    StoreAsTar: true
+
+- task: S3Upload@1
+  inputs:
+    awsCredentials: 'AWSConnecction'
+    regionName: 'us-east-1'
+    bucketName: 'practisedomain.cloud'
+    sourceFolder: '$(System.DefaultWorkingDirectory)/target'
+    globExpressions: '*.war'
+    targetFolder: '$(s3_path)' # Use the s3_path variable here to define the folder in S3
+    # storageClass: STANDARD
+
+- task: SonarQubePrepare@7
+  inputs:
+    SonarQube: 'SonarQube-Ubuntu'
+    scannerMode: 'cli'
+    configMode: 'manual'
+    cliProjectKey: 'MithunTechnologies-myapp'
+    cliProjectName: 'MithunTechnologies-myapp'
+    cliSources: '.'
+    extraProperties: |
+      # Additional properties that will be passed to the scanner, 
+      # Put one key=value per line, example:
+      # sonar.exclusions=**/*.bin
+      sonar.java.binaries=.
+
+- task: SonarQubeAnalyze@7
+  inputs:
+    jdkversion: 'JAVA_HOME'
+
+- task: CmdLine@2
+  inputs:
+    script: 'trivy fs --format table -o trivy-fs-report.html .'
+    workingDirectory: '$(System.DefaultWorkingDirectory)'
+
+- task: Docker@2
+  inputs:
+    containerRegistry: 'DockerVamsikrishna2049'
+    repository: 'vamsikrishna2049/maven-webapp'
+    command: 'buildAndPush'
+    Dockerfile: '**/Dockerfile'
