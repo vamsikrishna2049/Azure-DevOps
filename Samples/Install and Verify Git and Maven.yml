@@ -1,0 +1,77 @@
+trigger:
+- main
+
+pool:
+  name: 'YourSelfHostedAgentPool'  # Ensure this is your self-hosted agent pool
+
+steps:
+- script: |
+    echo "Detecting OS and checking if tools are installed..."
+
+    # Function to check if a command exists
+    command_exists() {
+      command -v "$1" &> /dev/null
+    }
+
+    # Check if Git is installed
+    if ! command_exists git; then
+      echo "Git not found. Installing Git..."
+      if [[ "$(uname)" == "Linux" ]]; then
+        if [ -f /etc/debian_version ]; then
+          echo "Debian-based OS detected"
+          sudo apt-get update
+          sudo apt-get install -y git
+        elif [ -f /etc/redhat-release ]; then
+          echo "RedHat-based OS detected"
+          sudo yum install -y git
+        else
+          echo "Unknown Linux distribution. Please manually install Git."
+          exit 1
+        fi
+      elif [[ "$(uname)" == "Darwin" ]]; then
+        echo "macOS detected"
+        brew install git
+      elif [[ "$(uname)" == "CYGWIN"* || "$(uname)" == "MINGW"* ]]; then
+        echo "Windows detected (using Git Bash)"
+        choco install git
+      else
+        echo "Unsupported OS for Git installation"
+        exit 1
+      fi
+    else
+      echo "Git is already installed."
+    fi
+
+    # Check if Maven is installed
+    if ! command_exists mvn; then
+      echo "Maven not found. Installing Maven..."
+      if [[ "$(uname)" == "Linux" ]]; then
+        if [ -f /etc/debian_version ]; then
+          echo "Debian-based OS detected"
+          sudo apt-get install -y maven
+        elif [ -f /etc/redhat-release ]; then
+          echo "RedHat-based OS detected"
+          sudo yum install -y maven
+        else
+          echo "Unknown Linux distribution. Please manually install Maven."
+          exit 1
+        fi
+      elif [[ "$(uname)" == "Darwin" ]]; then
+        echo "macOS detected"
+        brew install maven
+      elif [[ "$(uname)" == "CYGWIN"* || "$(uname)" == "MINGW"* ]]; then
+        echo "Windows detected (using Git Bash)"
+        choco install maven
+      else
+        echo "Unsupported OS for Maven installation"
+        exit 1
+      fi
+    else
+      echo "Maven is already installed."
+    fi
+  displayName: 'Install Maven and Git if Not Present'
+
+- script: |
+    git --version
+    mvn --version
+  displayName: 'Check Git and Maven Versions'
