@@ -1,0 +1,109 @@
+trigger:
+- main
+
+jobs:
+- job: Build
+  displayName: 'Build Application'
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - task: UseDotNet@2
+    inputs:
+      packageType: 'sdk'
+      version: '5.x'
+      installationPath: $(Agent.ToolsDirectory)/dotnet
+    displayName: 'Install .NET SDK 5.x'
+
+  - script: |
+      echo "Restoring NuGet packages..."
+      dotnet restore
+    displayName: 'Restore NuGet Packages'
+
+  - script: |
+      echo "Building the application..."
+      dotnet build --configuration Release
+    displayName: 'Build Application'
+
+  - script: |
+      echo "Running unit tests..."
+      dotnet test --configuration Release --no-restore --verbosity normal
+    displayName: 'Run Unit Tests'
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      ArtifactName: 'drop'
+      publishLocation: 'Container'
+    displayName: 'Publish Artifacts'
+
+- job: Deploy
+  displayName: 'Deploy to Production'
+  dependsOn: Build
+  pool:
+    vmImage: 'ubuntu-latest'
+  environment: 
+    name: 'Production'
+    resourceType: 'VirtualMachine' # Or other resource types like Kubernetes/AKS
+
+  steps:
+  - task: DownloadBuildArtifacts@0
+    inputs:
+      buildType: 'current'
+      downloadType: 'specific'
+      artifactName: 'drop'
+      downloadPath: $(Pipeline.Workspace)
+    displayName: 'Download Artifacts'
+
+  - task: AzureWebApp@1
+    inputs:
+      azureSubscription: 'Your Azure Subscription'
+      appName: 'YourAppName'
+      package: '$(Pipeline.Workspace)/drop/yourApp.zip'
+    displayName: 'Deploy to Azure Web App'
+
+  # Add a rollback step in case deployment fails
+  - script: |
+      echo "Checking for deployment errors..."
+      # Logic for checking deployment status could go here
+      # If an error is detected, trigger a rollback
+    displayName: 'Check Deployment Status'
+    condition: failed()  # Run only if previous steps fail
+
+  # Approval gate for manual approval before deployment
+  approvals:
+    - approval:
+        type: 'manual'
+        approvers:
+          - 'user1@yourdomain.com'
+          - 'user2@yourdomain.com'
+    displayName: 'Approval Gate for Production Deployment'
+
+- job: Notify
+  displayName: 'Notify on Deployment Status'
+  dependsOn: Deploy
+  condition: always()  # Runs even if the deployment fails or succeeds
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - script: |
+      if [ "$(Build.Status)" == "Succeeded" ]; then
+        echo "Deployment succeeded. Sending success notification."
+        # Send success notification (Slack, Teams, etc.)
+      else
+        echo "Deployment failed. Sending failure notification."
+        # Send failure notification
+      fi
+    displayName: 'Notify Deployment Status'
+
+- job: Versioning
+  displayName: 'Version the Artifact'
+  dependsOn: Build
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - script: |
+      echo "Versioning the build artifact..."
+      VERSION=$(Build.BuildId)
+      echo "##vso[build.addbuildtag]$VERSION"
+      echo "Build version: $VERSION" > $(Build.ArtifactStagingDirectory)/version.txt
+    displayName: 'Add Build Version Tag'
