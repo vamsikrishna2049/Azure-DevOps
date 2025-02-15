@@ -1,0 +1,60 @@
+trigger:
+- main  # Adjust the branch as needed
+
+pool:
+  name: LinuxHostedPool  # Self-hosted agent
+
+#Pipelines/Library/aws credentials(named as aws) - Access key, secretkey along with region  Allow Pipeline permissions
+variables:
+- group: aws  # ✅ Correct reference to variable group
+
+stages:
+- stage: Git
+  displayName: 'Clone the Repo'
+
+  jobs:
+  - job: GitChekout
+    displayName: 'Checkout Terraform code'
+    steps:    
+    - checkout: self  # Fetch Terraform code from Azure Repos
+
+- stage: Terraform
+  displayName: 'Deploy Infrastructure to AWS'
+  dependsOn: Git #Fetch Terraform code from Azure Repos
+
+  jobs:
+  - job: Terraform
+    displayName: 'Terraform Deployment'
+    steps:
+    # ✅ Download Secure File (uat.tfvars)
+    - task: DownloadSecureFile@1
+      name: tfvars
+      displayName: 'Download uat.tfvars'
+      inputs:
+        secureFile: 'uat.tfvars'
+
+    # ✅ Validate AWS Credentials
+    - script: |
+        echo "Validating AWS credentials..."
+        echo "AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)"
+        echo "AWS_SECRET_ACCESS_KEY=[HIDDEN]"
+        echo "AWS_REGION=$(AWS_REGION)"
+        
+        export AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID)
+        export AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY)
+        export AWS_REGION=$(AWS_REGION)
+
+      displayName: 'Validate AWS Credentials'
+
+    # ✅ Initialize Terraform Backend
+    - script: |
+        terraform init \
+          -backend-config="bucket=practisedomain.cloud" \
+          -backend-config="key=terraform/state.tfstate" \
+          -backend-config="region=$(AWS_REGION)"
+      displayName: 'Terraform Init'
+    
+    # ✅ Create the Infra over the cloud    
+    - script: |
+        terraform apply -auto-approve -var-file="$(Agent.TempDirectory)/uat.tfvars"
+      displayName: 'Terraform Apply with uat.tfvars'
